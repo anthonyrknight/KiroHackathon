@@ -260,7 +260,67 @@ for i, (title, body) in enumerate(examples):
     para(t, body, 14, MUTED, space_after=0)
 
 # ==========================================================================
-# Slide 6 — Impact / closing
+# Slide 6 — Proposed AWS Architecture (deployment plan)
+# ==========================================================================
+s = slide()
+accent_bar(s)
+tf = tb(s, Inches(0.9), Inches(0.5), Inches(11.5), Inches(1.0))
+para(tf, "Proposed AWS Architecture", 36, WHITE, bold=True, first=True)
+para(tf, "Deployment plan — mapping each component to an AWS service", 20, ACCENT)
+
+aws_rows = [
+    ("Amazon Bedrock", "Conversational phrasing",
+     "Drop-in for the LLM layer already isolated in the agent — managed, "
+     "no API keys to ship."),
+    ("AWS App Runner / ECS Fargate", "Host the FastAPI app",
+     "Run the existing web app as a container with autoscaling and HTTPS."),
+    ("Amazon S3", "Store generated PDFs",
+     "Persist submission-ready documents instead of holding them in memory."),
+    ("Amazon DynamoDB / ElastiCache", "Session + workflow state",
+     "Replace the in-memory session store so conversations survive restarts "
+     "and scale out."),
+    ("Amazon Cognito", "Student authentication",
+     "Campus SSO / login so each submission is tied to a verified student."),
+    ("Amazon API Gateway + CloudWatch", "Routing & observability",
+     "Managed entry point for the chat API with logging, metrics, and alarms."),
+]
+x = Inches(0.9)
+y = Inches(1.85)
+cw = Inches(5.65)
+ch = Inches(1.5)
+gapx = Inches(0.2)
+gapy = Inches(0.18)
+for i, (svc, role, body) in enumerate(aws_rows):
+    col = i % 2
+    row = i // 2
+    left = x + col * (cw + gapx)
+    top = y + row * (ch + gapy)
+    card(s, left, top, cw, ch)
+    t = tb(s, left + Inches(0.3), top + Inches(0.2), cw - Inches(0.6),
+           ch - Inches(0.4))
+    p = t.paragraphs[0]
+    p.space_after = Pt(4)
+    r1 = p.add_run()
+    r1.text = svc + "   "
+    r1.font.size = Pt(17)
+    r1.font.bold = True
+    r1.font.color.rgb = ACCENT
+    r1.font.name = "Segoe UI"
+    r2 = p.add_run()
+    r2.text = "· " + role
+    r2.font.size = Pt(14)
+    r2.font.italic = True
+    r2.font.color.rgb = MUTED
+    r2.font.name = "Segoe UI"
+    para(t, body, 13, TEXT, space_after=0)
+
+note = tb(s, Inches(0.9), Inches(6.95), Inches(11.5), Inches(0.45))
+para(note, "Note: a proposed deployment architecture — the current prototype "
+     "runs locally and is cloud-ready by design.", 12, MUTED, first=True,
+     align=PP_ALIGN.CENTER)
+
+# ==========================================================================
+# Slide 7 — Impact / closing
 # ==========================================================================
 s = slide()
 accent_bar(s)
