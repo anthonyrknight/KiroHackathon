@@ -173,15 +173,72 @@ def _parse_date(raw: str) -> Optional[date]:
 # --------------------------------------------------------------------------
 
 CAMPUS = {
-    "name": "Riverside State University",
-    "email_domain": "riverside.edu",
+    "name": "Sacramento State University",
+    "email_domain": "csus.edu",
     # Add/drop deadline for the current term. Real systems would pull this
     # from a term calendar; here it is a single configurable date.
     "add_drop_deadline": date(2026, 11, 30),
     "max_credits": 21,
     "min_credits_full_time": 12,
     "departments": ["Computer Science", "Mathematics", "Biology", "History", "Business"],
+    "registrar_office": "Office of the University Registrar",
+    "registrar_address": "6000 J Street, Sacramento, CA 95819",
+    "registrar_phone": "(916) 278-6011",
+    "current_term": "Fall 2026",
 }
+
+
+# --------------------------------------------------------------------------
+# Mock student records (the "database" the agent verifies against)
+#
+# A real system would query a student information system (SIS) over an API.
+# Here we use an in-memory dictionary keyed by student ID. Lookups are
+# case-insensitive on the ID and cross-check the name + email so the agent
+# can only verify a student who matches their own record.
+# --------------------------------------------------------------------------
+
+STUDENT_RECORDS: dict[str, dict] = {
+    "S1234567": {
+        "student_name": "Jordan Rivera",
+        "email": "jordan.rivera@csus.edu",
+        "enrollment_status": "Full-time",
+        "credits_enrolled": 15,
+        "program": "B.S. Computer Science",
+        "class_standing": "Junior",
+        "term": "Fall 2026",
+        "expected_graduation": "Spring 2028",
+        "enrollment_start": "August 25, 2025",
+    },
+    "S7654321": {
+        "student_name": "Priya Patel",
+        "email": "priya.patel@csus.edu",
+        "enrollment_status": "Full-time",
+        "credits_enrolled": 12,
+        "program": "B.A. History",
+        "class_standing": "Senior",
+        "term": "Fall 2026",
+        "expected_graduation": "Fall 2026",
+        "enrollment_start": "August 28, 2023",
+    },
+    "S2468013": {
+        "student_name": "Marcus Lee",
+        "email": "marcus.lee@csus.edu",
+        "enrollment_status": "Part-time",
+        "credits_enrolled": 6,
+        "program": "B.S. Biology",
+        "class_standing": "Sophomore",
+        "term": "Fall 2026",
+        "expected_graduation": "Spring 2029",
+        "enrollment_start": "January 20, 2025",
+    },
+}
+
+
+def lookup_student(student_id: str) -> Optional[dict]:
+    """Return the student record for an ID, or None if not found."""
+    if not student_id:
+        return None
+    return STUDENT_RECORDS.get(student_id.strip().upper())
 
 
 # --------------------------------------------------------------------------
@@ -295,9 +352,116 @@ COURSE_ADD_DROP = FormDefinition(
 )
 
 
+# --------------------------------------------------------------------------
+# Enrollment Verification Letter
+#
+# A student needs proof of enrollment (e.g. for a landlord). The agent
+# collects their identifying details, validates them against the student
+# database, and - only on a match - generates a completed verification
+# letter addressed to the requested recipient.
+# --------------------------------------------------------------------------
+
+def _enrollment_cross_rules(data: dict) -> ValidationResult:
+    """Verify the provided identity against the student database.
+
+    This is the heart of the workflow: the collected name + email must match
+    the record on file for the given student ID. On a match we enrich the
+    collected data with the official record so the letter is authoritative.
+    """
+    student_id = str(data.get("student_id", "")).strip().upper()
+    record = lookup_student(student_id)
+
+    if record is None:
+        return ValidationResult(
+            False,
+            "I couldn't find a student record for that ID. Double-check your "
+            "student ID and try again.",
+            normalized="student_id",
+        )
+
+    # Name must match (case-insensitive, whitespace-tolerant).
+    given_name = str(data.get("student_name", "")).strip().lower()
+    if given_name != record["student_name"].strip().lower():
+        return ValidationResult(
+            False,
+            "The name you entered doesn't match the record on file for that "
+            "student ID. Please enter your full legal name exactly as it "
+            "appears on your student record.",
+            normalized="student_name",
+        )
+
+    # Email must match the record.
+    given_email = str(data.get("email", "")).strip().lower()
+    if given_email != record["email"].strip().lower():
+        return ValidationResult(
+            False,
+            "The campus email you entered doesn't match the record on file "
+            "for that student ID. Please use the email tied to your account.",
+            normalized="email",
+        )
+
+    # Verified. Enrich the collected data with authoritative record fields so
+    # the generated letter reflects official information, not user claims.
+    data["verified"] = True
+    data["enrollment_status"] = record["enrollment_status"]
+    data["credits_enrolled"] = record["credits_enrolled"]
+    data["program"] = record["program"]
+    data["class_standing"] = record["class_standing"]
+    data["term"] = record["term"]
+    data["expected_graduation"] = record["expected_graduation"]
+    data["enrollment_start"] = record["enrollment_start"]
+
+    return ValidationResult(True)
+
+
+ENROLLMENT_VERIFICATION = FormDefinition(
+    id="enrollment_verification",
+    title="Enrollment Verification Letter",
+    description="Request an official letter confirming your enrollment, e.g. "
+    "for a landlord, employer, or bank.",
+    fields=[
+        Field(
+            key="student_name",
+            prompt="What's your full legal name as it appears on your student record?",
+            validators=[non_empty("your full name")],
+        ),
+        Field(
+            key="student_id",
+            prompt="What's your student ID?",
+            type="id",
+            help="Format: S followed by 7 digits, e.g. S1234567",
+            validators=[matches_pattern(r"S\d{7}", "S1234567")],
+        ),
+        Field(
+            key="email",
+            prompt="What's your campus email?",
+            type="email",
+            validators=[is_campus_email(CAMPUS["email_domain"])],
+        ),
+        Field(
+            key="recipient_name",
+            prompt="Who should the letter be addressed to?",
+            help="For example your landlord's name or property management company.",
+            validators=[non_empty("the recipient's name")],
+        ),
+        Field(
+            key="purpose",
+            prompt="What's the letter for?",
+            type="choice",
+            choices=["Housing / Landlord", "Employer", "Bank / Loan", "Insurance", "Other"],
+            validators=[is_choice(
+                ["Housing / Landlord", "Employer", "Bank / Loan", "Insurance", "Other"]
+            )],
+        ),
+    ],
+    cross_rules=_enrollment_cross_rules,
+)
+
+
 # Registry of all available forms, keyed by id.
 FORMS: dict[str, FormDefinition] = {
     COURSE_ADD_DROP.id: COURSE_ADD_DROP,
+    ENROLLMENT_VERIFICATION.id: ENROLLMENT_VERIFICATION,
 }
 
 
