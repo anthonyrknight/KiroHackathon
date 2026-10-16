@@ -173,8 +173,8 @@ def _parse_date(raw: str) -> Optional[date]:
 # --------------------------------------------------------------------------
 
 CAMPUS = {
-    "name": "Riverside State University",
-    "email_domain": "riverside.edu",
+    "name": "California State University",
+    "email_domain": "name@csu.edu",
     # Add/drop deadline for the current term. Real systems would pull this
     # from a term calendar; here it is a single configurable date.
     "add_drop_deadline": date(2026, 11, 30),
