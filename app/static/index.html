@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus Form Assistant</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app__header">
+      <div class="brand">
+        <span class="brand__mark">◎</span>
+        <div>
+          <h1>Campus Form Assistant</h1>
+          <p>Skip the paperwork. Just have a conversation.</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Form picker -->
+    <section id="picker" class="picker">
+      <h2>What do you need help with?</h2>
+      <div id="formList" class="form-list"></div>
+    </section>
+
+    <!-- Chat -->
+    <section id="chat" class="chat hidden">
+      <div class="chat__bar">
+        <button id="restartBtn" class="ghost-btn">&larr; New form</button>
+        <div class="progress">
+          <div class="progress__track"><div id="progressFill" class="progress__fill"></div></div>
+          <span id="progressText" class="progress__text"></span>
+        </div>
+      </div>
+
+      <div id="messages" class="messages"></div>
+
+      <div id="downloadArea" class="download hidden">
+        <a id="downloadLink" class="download__btn" href="#" target="_blank" rel="noopener">
+          ⬇ Download submission-ready PDF
+        </a>
+        <span id="refText" class="download__ref"></span>
+      </div>
+
+      <form id="composer" class="composer">
+        <input id="input" class="composer__input" type="text"
+               autocomplete="off" placeholder="Type your answer…" />
+        <button id="sendBtn" class="composer__send" type="submit">Send</button>
+      </form>
+    </section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
