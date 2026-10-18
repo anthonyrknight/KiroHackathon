@@ -38,6 +38,8 @@ def generate_pdf(form: FormDefinition, data: dict) -> tuple[bytes, str]:
     """
     if form.id == "enrollment_verification":
         return _generate_enrollment_letter(form, data)
+    if form.id == "sap_appeal":
+        return _generate_sap_appeal(form, data)
     return _generate_form_pdf(form, data)
 
 
@@ -273,3 +275,145 @@ def _generate_enrollment_letter(form: FormDefinition, data: dict) -> tuple[bytes
 
     doc.build(story)
     return buf.getvalue(), ref
+
+
+def _generate_sap_appeal(form: FormDefinition, data: dict) -> tuple[bytes, str]:
+    """Render a completed, submission-ready SAP appeal document.
+
+    Produces a formal appeal: campus header, a details table (student, standard
+    failed, term, circumstance, documentation), the student's personal
+    statement, what has changed, the academic plan, and a signature block.
+    """
+    buf = io.BytesIO()
+    ref = _reference_number(form.id)
+    today = datetime.now().strftime("%B %d, %Y")
+
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=LETTER,
+        topMargin=0.9 * inch,
+        bottomMargin=0.9 * inch,
+        leftMargin=1.0 * inch,
+        rightMargin=1.0 * inch,
+        title=f"{form.title} - {ref}",
+    )
+
+    styles = getSampleStyleSheet()
+    h_campus = ParagraphStyle(
+        "Campus", parent=styles["Title"], fontSize=18, spaceAfter=2
+    )
+    h_form = ParagraphStyle(
+        "FormTitle", parent=styles["Heading2"], fontSize=13,
+        textColor=colors.HexColor("#334155"), spaceAfter=10,
+    )
+    section = ParagraphStyle(
+        "Section", parent=styles["Heading3"], fontSize=11,
+        textColor=colors.HexColor("#1e293b"), spaceBefore=10, spaceAfter=4,
+    )
+    meta = ParagraphStyle(
+        "Meta", parent=styles["Normal"], fontSize=9,
+        textColor=colors.HexColor("#64748b"),
+    )
+    body = ParagraphStyle(
+        "Body", parent=styles["Normal"], fontSize=11, leading=16, spaceAfter=8,
+    )
+
+    story = []
+    story.append(Paragraph(CAMPUS["name"], h_campus))
+    story.append(Paragraph(form.title, h_form))
+    story.append(
+        Paragraph(
+            f"Reference: <b>{ref}</b> &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"Date: {today}",
+            meta,
+        )
+    )
+    story.append(Spacer(1, 0.25 * inch))
+
+    # Details table.
+    doc_text = "Yes" if data.get("has_documentation") else "No"
+    rows = [
+        ["Student Name", data.get("student_name", "")],
+        ["Student ID", data.get("student_id", "")],
+        ["Campus Email", data.get("email", "")],
+        ["SAP Standard Not Met", data.get("standard_failed", "")],
+        ["Term Affected", data.get("term_affected", "")],
+        ["Extenuating Circumstance", data.get("circumstance", "")],
+        ["Supporting Documentation Attached", doc_text],
+    ]
+    table = Table(
+        [[Paragraph(f"<b>{k}</b>", body), Paragraph(str(v), body)] for k, v in rows],
+        colWidths=[2.6 * inch, 3.7 * inch],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("ROWBACKGROUNDS", (0, 0), (-1, -1),
+                 [colors.white, colors.HexColor("#f1f5f9")]),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.append(table)
+
+    # Narrative sections.
+    story.append(Paragraph("Personal Statement", section))
+    story.append(Paragraph(_escape(data.get("personal_statement", "")), body))
+
+    story.append(Paragraph("What Has Changed", section))
+    story.append(Paragraph(_escape(data.get("whats_changed", "")), body))
+
+    story.append(Paragraph("Academic Plan Going Forward", section))
+    story.append(Paragraph(_escape(data.get("academic_plan", "")), body))
+
+    story.append(Spacer(1, 0.3 * inch))
+    story.append(
+        Paragraph(
+            "I certify that the information in this appeal is true and complete "
+            "to the best of my knowledge, and I understand that supporting "
+            "documentation may be required before a decision is made.",
+            body,
+        )
+    )
+    story.append(Spacer(1, 0.5 * inch))
+
+    sig = Table(
+        [["_______________________________", "_______________________"],
+         ["Student Signature", "Date"]],
+        colWidths=[3.2 * inch, 2.2 * inch],
+    )
+    sig.setStyle(
+        TableStyle(
+            [
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("TEXTCOLOR", (0, 1), (-1, 1), colors.HexColor("#64748b")),
+                ("TOPPADDING", (0, 1), (-1, 1), 2),
+            ]
+        )
+    )
+    story.append(sig)
+    story.append(Spacer(1, 0.3 * inch))
+    story.append(
+        Paragraph(
+            "This appeal was prepared with the Campus Form Assistant. Submit it "
+            f"to the Office of Financial Aid quoting reference {ref}. Attach any "
+            "supporting documentation before submitting.",
+            meta,
+        )
+    )
+
+    doc.build(story)
+    return buf.getvalue(), ref
+
+
+def _escape(text: str) -> str:
+    """Escape user text for reportlab Paragraph and preserve line breaks."""
+    text = (text or "")
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return text.replace("\n", "<br/>")
